@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  COACH
+  ADMIN
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Domain {
+  FINANCE
+  CONSULTING
+  DATA
+  PRODUCT
+  SOFTWARE_ENGINEERING
+  MARKETING
+  ENTREPRENEURSHIP
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CohortStatus {
+  OPEN
+  FULL
+  CLOSED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+/// Central user — owns auth credentials + role. Replaces the Supabase Profile.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(STUDENT)
+  bio          String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  programs    Program[]     @relation("CoachPrograms")
+  enrollments Enrollment[]
+  sessions    UserSession[]
+}
+
+/// Server-side session token stored in DB. Cookie holds the token.
+model UserSession {
+  id        String   @id @default(cuid())
+  token     String   @unique @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+model Program {
+  id               String        @id @default(cuid())
+  title            String
+  description      String
+  domain           Domain
+  targetAudience   String?
+  difficulty       Difficulty    @default(INTERMEDIATE)
+  /// Business rule: 2 ≤ numSessions ≤ 4
+  numSessions      Int
+  recommendedSize  Int           @default(10)
+  /// Business rule: maxCohortSize ≤ 20
+  maxCohortSize    Int
+  learningOutcomes String[]
+  status           ProgramStatus @default(DRAFT)
+  coachId          String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  coach        User          @relation("CoachPrograms", fields: [coachId], references: [id])
+  cohorts      Cohort[]
+  explorations Exploration[]
+}
+
+model Cohort {
+  id              String       @id @default(cuid())
+  programId       String
+  startDate       DateTime
+  endDate         DateTime
+  /// Business rule: 1 ≤ maxParticipants ≤ 20
+  maxParticipants Int
+  status          CohortStatus @default(OPEN)
+  createdAt       DateTime     @default(now())
+
+  program     Program      @relation(fields: [programId], references: [id])
+  sessions    Session[]
+  enrollments Enrollment[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  cohortId    String
+  title       String
+  description String?
+  /// Business rule: dateTime must be within cohort [startDate, endDate]
+  dateTime    DateTime
+  duration    Int      @default(45)
+  order       Int
+  createdAt   DateTime @default(now())
+
+  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@unique([cohortId, order])
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  userId     String
+  cohortId   String
+  enrolledAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+
+  /// Business rule: a student can only enroll once per cohort
+  @@unique([userId, cohortId])
+}
+
+model Exploration {
+  id          String    @id @default(cuid())
+  programId   String
+  title       String
+  description String
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+
+  program Program @relation(fields: [programId], references: [id])
+}
+
+model CoachApplication {
+  id         String   @id @default(cuid())
+  name       String
+  email      String
+  domain     String
+  experience String
+  motivation String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+}
