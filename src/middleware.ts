@@ -31,7 +31,7 @@ export function middleware(request: NextRequest) {
   // No session → redirect to login
   if (!token) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = '/programs';
     url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);
   }
