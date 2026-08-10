@@ -1,22 +1,28 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Paths that never require authentication
-const PUBLIC_PREFIXES = ['/login', '/programs', '/_next', '/favicon.ico'];
+// Exact-match public routes (careful: '/' must never go through startsWith)
+const PUBLIC_EXACT = ['/'];
+
+// Prefix-match public routes
+const PUBLIC_PREFIXES = ['/login', '/register', '/programs', '/_next', '/favicon.ico'];
 
 // Role-gated prefixes: if cookie present but role doesn't match, redirect to their home
 const ROLE_GATES: Array<{ prefix: string; roles: string[] }> = [
-  { prefix: '/admin',         roles: ['admin'] },
-  { prefix: '/coach',         roles: ['coach', 'admin'] },
-  { prefix: '/my-programs',   roles: ['student', 'admin'] },
-  { prefix: '/dashboard',     roles: ['student', 'coach', 'admin'] },
+  { prefix: '/admin',       roles: ['admin'] },
+  { prefix: '/coach',       roles: ['coach', 'admin'] },
+  { prefix: '/my-programs', roles: ['student', 'admin'] },
+  { prefix: '/dashboard',   roles: ['student', 'coach', 'admin'] },
 ];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow public paths
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
+  const isPublic =
+    PUBLIC_EXACT.includes(pathname) ||
+    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+
+  if (isPublic) {
     return NextResponse.next();
   }
 
