@@ -2,34 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, CalendarDays, GraduationCap, Layers, Plus, Users, X } from 'lucide-react';
+import { BookOpen, CalendarDays, GraduationCap, Layers, Pencil, Plus, Users, X } from 'lucide-react';
 import { createExplorationAction } from '@/app/actions/createExplorationAction';
-
-/* ── Domain colors ────────────────────────────────────────────── */
-const DOMAIN_COLOR: Record<string, string> = {
-  FINANCE: '#146138', DATA: '#0E7C86', PRODUCT: '#2D5FB8',
-  SOFTWARE_ENGINEERING: '#4A3FA6', CONSULTING: '#B8752D', MARKETING: '#B23B6B',
-  Finance: '#146138', Data: '#0E7C86', Product: '#2D5FB8',
-  'Software Engineering': '#4A3FA6', Consulting: '#B8752D', Marketing: '#B23B6B',
-};
-
-const DOMAIN_LABEL: Record<string, string> = {
-  FINANCE: 'Finance', DATA: 'Data', PRODUCT: 'Product',
-  SOFTWARE_ENGINEERING: 'Software Engineering', CONSULTING: 'Consulting', MARKETING: 'Marketing',
-};
-
-const DIFF_LABEL: Record<string, string> = {
-  BEGINNER: 'Beginner', INTERMEDIATE: 'Intermediate', ADVANCED: 'Advanced',
-};
-
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  PUBLISHED: { label: 'Publié',    className: 'badge-published' },
-  Published:  { label: 'Publié',    className: 'badge-published' },
-  DRAFT:      { label: 'Brouillon', className: 'badge-draft' },
-  Draft:      { label: 'Brouillon', className: 'badge-draft' },
-  ARCHIVED:   { label: 'Archivé',   className: 'badge-archived' },
-  Archived:   { label: 'Archivé',   className: 'badge-archived' },
-};
+import { updateProgramStatusAction } from '@/app/actions/updateProgramStatusAction';
+import { DOMAIN_COLOR, DOMAIN_LABEL, DIFF_LABEL, STATUS_CONFIG } from '@/lib/labels';
 
 /* ── Types ────────────────────────────────────────────────────── */
 type CoachProgram = {
@@ -62,7 +38,7 @@ function ExplorationModal({ programId, programTitle, onClose }: { programId: str
         setDone(true);
         setTimeout(onClose, 1200);
       } else {
-        setError(r.error);
+        setError((r as { ok: false; error: string }).error);
       }
     });
   }
@@ -111,16 +87,23 @@ function ProgramCard({
   program,
   onManage,
   onExploration,
+  onEdit,
+  onStatusChange,
 }: {
-  program:       CoachProgram;
-  onManage:      (id: string) => void;
-  onExploration: (id: string, title: string) => void;
+  program:        CoachProgram;
+  onManage:       (id: string) => void;
+  onExploration:  (id: string, title: string) => void;
+  onEdit:         (id: string) => void;
+  onStatusChange: (id: string, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') => void;
 }) {
-  const domainKey = program.domain;
-  const color = DOMAIN_COLOR[domainKey] ?? '#4d8063';
+  const domainKey  = program.domain;
+  const color      = DOMAIN_COLOR[domainKey] ?? '#4d8063';
   const domainLabel = DOMAIN_LABEL[domainKey] ?? domainKey;
-  const diffLabel = DIFF_LABEL[program.difficulty] ?? program.difficulty;
-  const sc = STATUS_CONFIG[program.status] ?? { label: program.status, className: 'badge-draft' };
+  const diffLabel  = DIFF_LABEL[program.difficulty] ?? program.difficulty;
+  const sc         = STATUS_CONFIG[program.status] ?? { label: program.status, className: 'badge-draft' };
+  const isDraft     = program.status === 'DRAFT';
+  const isPublished = program.status === 'PUBLISHED';
+  const isArchived  = program.status === 'ARCHIVED';
 
   return (
     <div className="coach-prog-card">
@@ -144,9 +127,9 @@ function ProgramCard({
 
       <div className="coach-prog-card-footer">
         <div className="coach-prog-card-actions">
-          {program.cohortCount > 0 && (
+          {isPublished && (
             <button className="outline-button" style={{ padding: '6px 10px', fontSize: 10 }} onClick={() => onManage(program.id)}>
-              <Users size={11} /> Cohortes
+              <Users size={11} /> {program.cohortCount > 0 ? `Cohorts (${program.cohortCount})` : 'Create cohort'}
             </button>
           )}
           <button
@@ -156,6 +139,34 @@ function ProgramCard({
           >
             + Exploration
           </button>
+          <button
+            className="ghost-button"
+            style={{ padding: '6px 10px', fontSize: 10, border: '1px solid var(--line)' }}
+            onClick={() => onEdit(program.id)}
+            title="Modifier"
+          >
+            <Pencil size={11} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          {isDraft && (
+            <button className="primary-button" style={{ padding: '5px 12px', fontSize: 10 }}
+              onClick={() => onStatusChange(program.id, 'PUBLISHED')}>
+              Publier
+            </button>
+          )}
+          {isPublished && (
+            <button className="ghost-button" style={{ padding: '5px 12px', fontSize: 10, border: '1px solid var(--line)', color: '#9aa4ab' }}
+              onClick={() => onStatusChange(program.id, 'ARCHIVED')}>
+              Archiver
+            </button>
+          )}
+          {isArchived && (
+            <button className="outline-button" style={{ padding: '5px 12px', fontSize: 10 }}
+              onClick={() => onStatusChange(program.id, 'DRAFT')}>
+              Réactiver
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -174,7 +185,7 @@ const TABS: { label: string; value: Tab }[] = [
 
 export function CoachProgramsView({
   coachName,
-  programs,
+  programs: initialPrograms,
   coachId,
 }: {
   coachName: string;
@@ -182,17 +193,34 @@ export function CoachProgramsView({
   coachId:   string;
 }) {
   const router = useRouter();
-  const [tab,  setTab]  = useState<Tab>('All');
-  const [modal, setModal] = useState<{ programId: string; programTitle: string } | null>(null);
+  const [tab,     setTab]     = useState<Tab>('All');
+  const [modal,   setModal]   = useState<{ programId: string; programTitle: string } | null>(null);
+  const [programs, setPrograms] = useState<CoachProgram[]>(initialPrograms);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [, startStatus] = useTransition();
+
+  void coachId;
 
   const filtered = tab === 'All' ? programs : programs.filter((p) => p.status === tab);
 
   const stats = {
-    published: programs.filter((p) => p.status === 'PUBLISHED' || p.status === 'Published').length,
-    draft:     programs.filter((p) => p.status === 'DRAFT' || p.status === 'Draft').length,
+    published: programs.filter((p) => p.status === 'PUBLISHED').length,
+    draft:     programs.filter((p) => p.status === 'DRAFT').length,
     cohorts:   programs.reduce((s, p) => s + p.cohortCount, 0),
     enrolled:  programs.reduce((s, p) => s + p.totalEnrolled, 0),
   };
+
+  function handleStatusChange(id: string, newStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED') {
+    setStatusMsg('');
+    startStatus(async () => {
+      const r = await updateProgramStatusAction(id, newStatus);
+      if (!r.ok) {
+        setStatusMsg((r as { ok: false; error: string }).error);
+        return;
+      }
+      setPrograms((prev) => prev.map((p) => p.id === id ? { ...p, status: newStatus } : p));
+    });
+  }
 
   return (
     <div>
@@ -217,6 +245,8 @@ export function CoachProgramsView({
           <Plus size={14} /> Créer un programme
         </button>
       </div>
+
+      {statusMsg && <div className="form-error" style={{ marginBottom: 16 }}>{statusMsg}</div>}
 
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: 28 }}>
@@ -248,7 +278,7 @@ export function CoachProgramsView({
           >
             {t.label}
             <span style={{ marginLeft: 6, background: tab === t.value ? '#2e7a5222' : '#f0f3f4', color: tab === t.value ? '#2e7a52' : '#9aa4ad', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700 }}>
-              {t.value === 'All' ? programs.length : programs.filter((p) => p.status === t.value || p.status === t.value.charAt(0) + t.value.slice(1).toLowerCase()).length}
+              {t.value === 'All' ? programs.length : programs.filter((p) => p.status === t.value).length}
             </span>
           </button>
         ))}
@@ -275,8 +305,10 @@ export function CoachProgramsView({
             <ProgramCard
               key={program.id}
               program={program}
-              onManage={(id) => router.push(`/coach/cohorts/${id}`)}
+              onManage={(id) => router.push(`/coach/programs/${id}`)}
               onExploration={(id, title) => setModal({ programId: id, programTitle: title })}
+              onEdit={(id) => router.push(`/coach/programs/${id}/edit`)}
+              onStatusChange={handleStatusChange}
             />
           ))}
         </div>

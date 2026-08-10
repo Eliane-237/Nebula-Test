@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-  BookOpen, BriefcaseBusiness, CalendarDays, CircleHelp,
-  Compass, LayoutDashboard, LogOut, Menu, Settings, Users, X,
+  BookOpen, BriefcaseBusiness,
+  Compass, LayoutDashboard, LogOut, Menu, X,
 } from 'lucide-react';
 import { logoutAction } from '@/app/actions/logoutAction';
 import { useUser } from '@/lib/user-context';
@@ -21,18 +21,14 @@ const roleItems: Record<Role, { label: string; icon: typeof LayoutDashboard; hre
     { label: 'Overview',         icon: LayoutDashboard,   href: '/dashboard'    },
     { label: 'Explore programs', icon: Compass,           href: '/programs'     },
     { label: 'My programs',      icon: BriefcaseBusiness, href: '/my-programs'  },
-    { label: 'Calendar',         icon: CalendarDays,      href: '/calendar'     },
   ],
   coach: [
     { label: 'Overview',    icon: LayoutDashboard,   href: '/dashboard'      },
     { label: 'My programs', icon: BriefcaseBusiness, href: '/coach/programs' },
-    { label: 'Calendar',    icon: CalendarDays,      href: '/calendar'       },
   ],
   admin: [
     { label: 'Platform overview', icon: LayoutDashboard, href: '/admin'    },
     { label: 'All programs',      icon: BookOpen,        href: '/programs' },
-    { label: 'Cohorts',           icon: Users,           href: '/cohorts'  },
-    { label: 'Calendar',          icon: CalendarDays,    href: '/calendar' },
   ],
 };
 
@@ -105,26 +101,13 @@ export function Sidebar({ role, activePage, onPageChange }: SidebarProps) {
           {items.map(({ label, icon: Icon, href }) => (
             <button
               key={label}
-              className={`nav-item ${pathname === href ? 'active' : ''}`}
+              className={`nav-item ${pathname.startsWith(href) && (href !== '/dashboard' || pathname === href) ? 'active' : ''}`}
               onClick={() => navigate(href, label)}
             >
               <Icon size={18} />
               <span>{label}</span>
             </button>
           ))}
-          <p className="nav-label nav-label-spaced">Manage</p>
-          <button
-            className={`nav-item ${pathname === '/settings' ? 'active' : ''}`}
-            onClick={() => navigate('/settings', 'Settings')}
-          >
-            <Settings size={18} /><span>Settings</span>
-          </button>
-          <button
-            className={`nav-item ${pathname === '/help' ? 'active' : ''}`}
-            onClick={() => navigate('/help', 'Help center')}
-          >
-            <CircleHelp size={18} /><span>Help center</span>
-          </button>
         </nav>
 
         <div className="sidebar-bottom">

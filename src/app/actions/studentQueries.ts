@@ -10,9 +10,17 @@ export async function getStudentEnrollments(userId: string) {
         cohort: {
           include: {
             program: {
-              include: { explorations: true },
+              include: {
+                coach: { select: { name: true } },
+                explorations: {
+                  include: {
+                    responses: { where: { userId } },
+                  },
+                },
+              },
             },
             sessions: { orderBy: { order: 'asc' } },
+            _count: { select: { enrollments: true } },
           },
         },
       },
@@ -22,5 +30,24 @@ export async function getStudentEnrollments(userId: string) {
   } catch (err) {
     console.error('[getStudentEnrollments]', err);
     return { data: [], error: 'Failed to load your programs.' };
+  }
+}
+
+export async function getStudentUpcomingSessions(userId: string) {
+  try {
+    const sessions = await prisma.session.findMany({
+      where: {
+        dateTime: { gte: new Date() },
+        cohort: { enrollments: { some: { userId } } },
+      },
+      include: {
+        cohort: { include: { program: { select: { title: true } } } },
+      },
+      orderBy: { dateTime: 'asc' },
+      take: 5,
+    });
+    return sessions;
+  } catch {
+    return [];
   }
 }

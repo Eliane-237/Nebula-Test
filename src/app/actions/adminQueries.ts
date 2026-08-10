@@ -14,6 +14,7 @@ export async function getAdminStats() {
       upcomingSessions,
       latestEnrollments,
       pendingCoachApplications,
+      allPrograms,
     ] = await Promise.all([
       prisma.program.count(),
       prisma.program.count({ where: { status: 'PUBLISHED' } }),
@@ -40,6 +41,14 @@ export async function getAdminStats() {
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
+      prisma.program.findMany({
+        include: {
+          coach:  { select: { name: true } },
+          _count: { select: { cohorts: true } },
+          cohorts: { select: { _count: { select: { enrollments: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     return {
@@ -53,6 +62,15 @@ export async function getAdminStats() {
         upcomingSessions,
         latestEnrollments,
         pendingCoachApplications,
+        allPrograms: allPrograms.map((p) => ({
+          id:            p.id,
+          title:         p.title,
+          domain:        p.domain,
+          status:        p.status,
+          coachName:     p.coach.name,
+          cohortCount:   p._count.cohorts,
+          totalEnrolled: p.cohorts.reduce((s, c) => s + c._count.enrollments, 0),
+        })),
       },
       error: null,
     };

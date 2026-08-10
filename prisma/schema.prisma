@@ -56,9 +56,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  programs    Program[]     @relation("CoachPrograms")
-  enrollments Enrollment[]
-  sessions    UserSession[]
+  programs             Program[]             @relation("CoachPrograms")
+  enrollments          Enrollment[]
+  sessions             UserSession[]
+  explorationResponses ExplorationResponse[]
 }
 
 /// Server-side session token stored in DB. Cookie holds the token.
@@ -148,7 +149,22 @@ model Exploration {
   dueDate     DateTime?
   createdAt   DateTime  @default(now())
 
-  program Program @relation(fields: [programId], references: [id])
+  program   Program               @relation(fields: [programId], references: [id])
+  responses ExplorationResponse[]
+}
+
+model ExplorationResponse {
+  id            String   @id @default(cuid())
+  explorationId String
+  userId        String
+  text          String
+  coachFeedback String?
+  submittedAt   DateTime @default(now())
+
+  exploration Exploration @relation(fields: [explorationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([explorationId, userId])
 }
 
 model CoachApplication {

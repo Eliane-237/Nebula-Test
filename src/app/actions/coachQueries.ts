@@ -43,13 +43,40 @@ export async function getCoachProgramDetail(programId: string) {
           },
           orderBy: { startDate: 'asc' },
         },
-        explorations: { orderBy: { createdAt: 'desc' } },
+        explorations: {
+          include: {
+            responses: {
+              include: { user: { select: { id: true, name: true, email: true } } },
+              orderBy: { submittedAt: 'asc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     return { data: program, error: null };
   } catch (err) {
     console.error('[getCoachProgramDetail]', err);
     return { data: null, error: 'Failed to load program.' };
+  }
+}
+
+export async function getCoachUpcomingSessions(coachId: string) {
+  try {
+    const sessions = await prisma.session.findMany({
+      where: {
+        dateTime: { gte: new Date() },
+        cohort: { program: { coachId } },
+      },
+      include: {
+        cohort: { include: { program: { select: { title: true } } } },
+      },
+      orderBy: { dateTime: 'asc' },
+      take: 5,
+    });
+    return sessions;
+  } catch {
+    return [];
   }
 }
 
