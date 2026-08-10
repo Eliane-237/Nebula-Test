@@ -1,39 +1,31 @@
 'use server';
 
-import { randomUUID } from 'crypto';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { sessionStore, type SessionUser } from '@/lib/session-store';
+import { prisma } from '@/lib/prisma';
+import { sessionStore } from '@/lib/session-store';
 
-const ACCOUNTS: Record<string, { user: SessionUser; password: string }> = {
-  'student@nebula.com': {
-    password: 'student123',
-    user: { id: 'usr_student', email: 'student@nebula.com', name: 'Alex Carter',   role: 'student' },
-  },
-  'coach@nebula.com': {
-    password: 'coach123',
-    user: { id: 'usr_coach',   email: 'coach@nebula.com',   name: 'Maya Thompson', role: 'coach'   },
-  },
-  'admin@nebula.com': {
-    password: 'admin123',
-    user: { id: 'usr_admin',   email: 'admin@nebula.com',   name: 'Alicia Davis',  role: 'admin'   },
-  },
+const CREDENTIALS: Record<string, string> = {
+  'student@nebula.com': 'student123',
+  'coach@nebula.com': 'coach123',
+  'admin@nebula.com': 'admin123',
 };
 
 type State = { error: string } | null;
 
 export async function loginAction(_prev: State, formData: FormData): Promise<State> {
-  const email    = String(formData.get('email')    ?? '').toLowerCase().trim();
-  const password = String(formData.get('password') ?? '');
+  const email      = String(formData.get('email')    ?? '').toLowerCase().trim();
+  const password   = String(formData.get('password') ?? '');
   const redirectTo = String(formData.get('redirect') ?? '').trim();
 
-  const account = ACCOUNTS[email];
-  if (!account || account.password !== password) {
+  if (CREDENTIALS[email] !== password) {
     return { error: 'Email ou mot de passe incorrect.' };
   }
 
-  const token = randomUUID();
-  sessionStore.set(token, account.user);
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return { error: 'Compte introuvable en base — as-tu lancé le seed ?' };
+
+  const token = await sessionStore.create(user);
 
   const jar = await cookies();
   jar.set('nebula_sid', token, {
@@ -45,11 +37,10 @@ export async function loginAction(_prev: State, formData: FormData): Promise<Sta
   });
 
   const roleDest =
-    account.user.role === 'admin' ? '/admin' :
-    account.user.role === 'coach' ? '/coach/programs' :
+    user.role === 'ADMIN' ? '/admin' :
+    user.role === 'COACH' ? '/coach/programs' :
     '/my-programs';
 
-  // Honour the ?redirect= param if it points to a safe internal path
   const dest = (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//'))
     ? redirectTo
     : roleDest;

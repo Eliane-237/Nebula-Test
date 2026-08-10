@@ -1,3 +1,6 @@
+import { prisma } from './prisma';
+import { randomUUID } from 'crypto';
+
 export type SessionUser = {
   id: string;
   email: string;
@@ -5,38 +8,42 @@ export type SessionUser = {
   role: 'student' | 'coach' | 'admin';
 };
 
-type Entry = { user: SessionUser; expiresAt: number };
-
-// Persist the Map across Next.js hot-reloads in dev mode (globalThis trick)
-declare global {
-  // eslint-disable-next-line no-var
-  var _nebulaSessionStore: Map<string, Entry> | undefined;
-}
-
-const store: Map<string, Entry> =
-  (globalThis._nebulaSessionStore ??= new Map<string, Entry>());
-
-if (process.env.NODE_ENV !== 'production') {
-  globalThis._nebulaSessionStore = store;
-}
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const sessionStore = {
-  set(token: string, user: SessionUser): void {
-    store.set(token, {
-      user,
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  async create(user: { id: string; email: string; name: string; role: string }): Promise<string> {
+    const token = randomUUID();
+    await prisma.userSession.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+      },
     });
+    return token;
   },
-  get(token: string): SessionUser | null {
-    const entry = store.get(token);
-    if (!entry) return null;
-    if (entry.expiresAt < Date.now()) {
-      store.delete(token);
+
+  async get(token: string): Promise<SessionUser | null> {
+    const session = await prisma.userSession.findUnique({
+      where: { token },
+      include: { user: true },
+    });
+    if (!session) return null;
+
+    if (session.expiresAt < new Date()) {
+      await prisma.userSession.delete({ where: { token } }).catch(() => {});
       return null;
     }
-    return entry.user;
+
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+      role: session.user.role.toLowerCase() as SessionUser['role'],
+    };
   },
-  delete(token: string): void {
-    store.delete(token);
+
+  async delete(token: string): Promise<void> {
+    await prisma.userSession.delete({ where: { token } }).catch(() => {});
   },
 };
