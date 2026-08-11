@@ -30,5 +30,5 @@ Development proceeded through a series of feature-by-feature prompts, each scope
 
 ## Model
 
-- **Model**: `claude-sonnet-4-6` via Claude Code CLI
+- **Model**: `claude-sonnet-4-6` 
 - **Session date**: 2026-08-10
